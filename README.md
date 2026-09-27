@@ -100,11 +100,37 @@ partial answer is fine; a *silent* one is not.
 
 ```bash
 flutter test                              # diff parsing + the gate's behaviour
-dart run impact_radar:impact_scan --project testbed/ticket_app   # the closure, end to end
 ```
 
-`testbed/ticket_app` is a pure-Dart fixture with a deliberate chain — repository → use case
-→ cubit → screen — so the scanner can be tested without a Flutter SDK or a real project.
-Editing only `lib/data/ticket_repository.dart` must produce `tickets_screen.dart` in the
-report. That is the case the whole tool exists for.
+### The fixture (proves the closure works)
+
+`testbed/ticket_app` is a pure-Dart app with a deliberate chain:
+
+```
+TicketRepository.getAllTickets()      <- the "API" the AI edits
+  -> GetTickets                      (use case)
+    -> TicketsCubit                  (state)
+      -> TicketsScreen               (the screen we want flagged)
+        -> TicketCard                (a widget composed into the screen)
+```
+
+Pure Dart on purpose: no Flutter SDK, so it resolves fast and deterministically.
+`widget.dart` is a shim — the scanner reads declaration spans, not superclasses.
+
+The fixture needs its own git repo, because the scanner diffs against real history. That
+repo is not committed (git would record the directory as an embedded repo and clones would
+get a broken pointer), so recreate it first:
+
+```bash
+# PowerShell
+powershell -ExecutionPolicy Bypass -File testbed/reset_fixture.ps1
+
+# then add a searchTickets method to testbed/ticket_app/lib/data/ticket_repository.dart
+dart run impact_radar:impact_scan --project testbed/ticket_app
+```
+
+Expected: `tickets_screen.dart` in the report at depth 2, in about 1 second. Editing only
+the repository and finding the screen three hops away is the case the whole tool exists
+for, so it is the test worth keeping green.
+
 
