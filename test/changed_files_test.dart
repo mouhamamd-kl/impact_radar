@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:impact_radar/src/scan/git_diff.dart';
+import 'package:impact_radar/src/scan/changed_files.dart';
 
 void main() {
   group('parseUnifiedDiff', () {

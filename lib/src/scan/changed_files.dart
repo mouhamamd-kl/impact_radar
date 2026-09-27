@@ -1,4 +1,7 @@
-/// Parsing of `git diff --unified=0` output into the files and lines that changed.
+/// Which files and lines a change touched, read straight out of `git diff`.
+///
+/// The only part of the pipeline that knows git exists. Everything downstream works in terms
+/// of declarations and references, so this can be replaced without touching the walk.
 library;
 
 import 'dart:convert';
@@ -122,3 +125,21 @@ List<ChangedFile> parseUnifiedDiff(String diff) {
   // A file with no new-side lines (pure deletion) has nothing to scan.
   return files.where((f) => f.lines.isNotEmpty).toList();
 }
+
+/// Codegen output. Never a scan target, and never a source of affected class names.
+///
+/// Generated files are outputs, not inputs. Scanning them floods the report with codegen
+/// noise, since every field of a Freezed class is referenced by its own `copyWith`.
+bool isGeneratedFile(String path) {
+  final name = path.split('/').last;
+  return name.endsWith('.g.dart') ||
+      name.endsWith('.freezed.dart') ||
+      name.endsWith('.mocks.dart') ||
+      name.endsWith('.config.dart') ||
+      name.endsWith('.gr.dart') ||
+      path.startsWith('.dart_tool/');
+}
+
+/// True for the files a scan should look at: Dart, and not generated.
+bool isScannableFile(String path) =>
+    path.endsWith('.dart') && !isGeneratedFile(path);
