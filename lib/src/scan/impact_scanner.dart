@@ -139,7 +139,7 @@ class ImpactScanner {
         repoRoot: repoRoot,
         changes: changes,
         result: result,
-        affectedTypes: index.typeNamesFor(result.fileDepths.keys),
+        index: index,
         stopwatch: stopwatch,
       );
 
@@ -168,7 +168,7 @@ class ImpactScanner {
     required String repoRoot,
     required List<ChangedFile> changes,
     required WalkResult result,
-    required Set<String> affectedTypes,
+    required SymbolIndex index,
     required Stopwatch stopwatch,
   }) {
     // Nearest first, so the top of the report is what to check.
@@ -185,7 +185,11 @@ class ImpactScanner {
       changedFiles: changes.map((c) => c.path).toList(),
       seeds: result.expanded,
       affectedFiles: ordered,
-      affectedTypes: affectedTypes.toList()..sort(),
+      affectedTypes: index.typeNamesFor(result.fileDepths.keys).toList()
+        ..sort(),
+      typeDepths: index.typeDepthsFor(result.fileDepths),
+      widgetTypes: index.widgetTypesFor(result.fileDepths.keys).toList()
+        ..sort(),
       fileDepths: Map<String, int>.from(result.fileDepths),
       hits: <String, List<String>>{
         for (final e in result.hitsByFile.entries)

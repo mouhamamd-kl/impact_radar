@@ -133,6 +133,39 @@ class SymbolTree {
     for (final span in _typeSpans) span.ref.name,
   };
 
+  /// The subset of [typeNames] that are actually widgets.
+  ///
+  /// Identified by a child symbol named `build`, which every `StatelessWidget` subclass and
+  /// every `StatefulWidget`'s `State` class has. That is a good enough signal for a dev tool
+  /// and costs nothing: the tree is already parsed and already searched for `build` to seed
+  /// changes, this just records which classes had one.
+  ///
+  /// Narrowing to widgets matters for correctness, not tidiness. The report's
+  /// [typeNames] is a flat union of every class in every affected file, so a `Ticket` *model*
+  /// in that list would match a `Ticket` *widget* on screen.
+  late final Set<String> widgetTypeNames = _findWidgetTypes();
+
+  Set<String> _findWidgetTypes() {
+    final out = <String>{};
+    void walk(List<Map<String, dynamic>> list) {
+      for (final node in list) {
+        final children = node['children'];
+        if (children is! List) continue;
+        final kids = children.cast<Map<String, dynamic>>();
+        if (_typeKinds.contains(_int(node['kind']))) {
+          final name = node['name'];
+          if (name is String && kids.any((c) => c['name'] == 'build')) {
+            out.add(name);
+          }
+        }
+        walk(kids);
+      }
+    }
+
+    walk(_nodes);
+    return out;
+  }
+
   /// The innermost class-like declaration whose range contains [line], or null if the line is
   /// outside every class in the file.
   ///

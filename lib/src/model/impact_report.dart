@@ -42,6 +42,8 @@ class ImpactReport {
     required this.seeds,
     required this.affectedFiles,
     required this.affectedTypes,
+    required this.typeDepths,
+    required this.widgetTypes,
     required this.fileDepths,
     required this.hits,
     required this.queryCount,
@@ -63,8 +65,20 @@ class ImpactReport {
   /// Everything transitively reachable from a changed declaration, closest first.
   final List<String> affectedFiles;
 
-  /// Class names declared in the affected files.
+  /// Class names declared in the affected files. The honest superset: it includes cubits,
+  /// use cases and models, which is informative but cannot be matched against mounted
+  /// widgets reliably. Use [widgetTypes] for that.
   final List<String> affectedTypes;
+
+  /// Class name -> fewest hops from the change.
+  ///
+  /// `affectedTypes` is a `List<String>` and cannot express "which of these is nearest",
+  /// which is what the outline needs in order to read loudest at the closest hit.
+  final Map<String, int> typeDepths;
+
+  /// The subset of [affectedTypes] that are actually widgets — classes with a `build`
+  /// method. This is what the runtime matches against the mounted element tree.
+  final List<String> widgetTypes;
 
   /// Repo-relative path -> fewest hops from the change. Recorded for ranking; this step
   /// deliberately applies no filtering based on it.
@@ -91,6 +105,8 @@ class ImpactReport {
     'seeds': seeds.map((s) => s.toJson()).toList(),
     'affectedFiles': affectedFiles,
     'affectedTypes': affectedTypes,
+    'typeDepths': typeDepths,
+    'widgetTypes': widgetTypes,
     'fileDepths': fileDepths,
     'hits': hits,
     'truncated': truncated,
@@ -127,6 +143,11 @@ class ImpactReport {
       ],
       affectedFiles: _stringList(json['affectedFiles']),
       affectedTypes: _stringList(json['affectedTypes']),
+      typeDepths: _intMap(json['typeDepths']),
+      // Absent in older reports: fall back to affectedTypes rather than showing nothing.
+      widgetTypes: json.containsKey('widgetTypes')
+          ? _stringList(json['widgetTypes'])
+          : _stringList(json['affectedTypes']),
       fileDepths: <String, int>{
         for (final e in (rawDepths?.entries ?? const <MapEntry<String, dynamic>>[]))
           if (e.value is int) e.key: e.value as int,
@@ -144,6 +165,14 @@ class ImpactReport {
 
   static List<String> _stringList(dynamic v) =>
       (v as List? ?? const <dynamic>[]).whereType<String>().toList();
+
+  static Map<String, int> _intMap(dynamic v) {
+    if (v is! Map) return const <String, int>{};
+    return <String, int>{
+      for (final e in v.entries)
+        if (e.key is String && e.value is int) e.key as String: e.value as int,
+    };
+  }
 }
 
 /// Reads a report written by the scanner. Used by the runtime side.

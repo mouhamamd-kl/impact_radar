@@ -61,6 +61,35 @@ class SymbolIndex {
     }
     return out;
   }
+
+  /// Widget-only class names declared in the affected files.
+  Set<String> widgetTypesFor(Iterable<String> repoRelativePaths) {
+    final out = <String>{};
+    for (final rel in repoRelativePaths) {
+      out.addAll(
+        _trees[_paths.absolute(rel)]?.widgetTypeNames ?? const <String>{},
+      );
+    }
+    return out;
+  }
+
+  /// Class name -> fewest hops at which it was reached.
+  ///
+  /// Derived from the file's depth: a class declared in a depth-2 file is a depth-2 hit.
+  /// Good enough for ranking, and it avoids tracking depth per declaration instead of per
+  /// file, which is what the walk actually measures.
+  Map<String, int> typeDepthsFor(Map<String, int> fileDepths) {
+    final out = <String, int>{};
+    fileDepths.forEach((rel, depth) {
+      final tree = _trees[_paths.absolute(rel)];
+      if (tree == null) return;
+      for (final name in tree.typeNames) {
+        final existing = out[name];
+        if (existing == null || depth < existing) out[name] = depth;
+      }
+    });
+    return out;
+  }
 }
 
 /// What the walk produced.

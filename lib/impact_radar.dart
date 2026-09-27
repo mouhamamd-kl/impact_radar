@@ -10,4 +10,17 @@
 library;
 
 export 'src/model/impact_report.dart' show ImpactReport, ImpactSeed, readReportFile;
-export 'src/ui/impact_gate.dart' show ImpactGate;
+export 'src/ui/impact_gate.dart'
+    show
+        ImpactCardPosition,
+        ImpactGate,
+        ImpactMode,
+        impactCardKey,
+        impactCollapseKey,
+        impactDismissKey,
+        impactExpandKey,
+        impactHighlightsKey,
+        impactScreenToggleKey,
+        impactWidgetToggleKey;
+export 'src/ui/impact_highlight.dart'
+    show ImpactHighlight, ImpactHighlighter, ImpactHighlightPainter, typeNameOf;
