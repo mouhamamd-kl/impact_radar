@@ -24,3 +24,5 @@ export 'src/ui/impact_gate.dart'
         impactWidgetToggleKey;
 export 'src/ui/impact_highlight.dart'
     show ImpactHighlight, ImpactHighlighter, ImpactHighlightPainter, typeNameOf;
+export 'src/ui/impact_source.dart'
+    show FileSource, HttpSource, ImpactSource, impactSourceFromEnv;

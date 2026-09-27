@@ -1,20 +1,30 @@
 /// Scans a project for code affected by uncommitted changes and writes `impact.json`.
 ///
 /// Usage:
-///   dart run impact_radar:impact_scan [options] [path/to/file.dart ...]
+///   dart run impact_radar:impact_scan [options]
+///   dart run impact_radar:impact_scan serve [options]
 ///
-/// With no file arguments it diffs against the base ref (default HEAD) and scans every
-/// changed Dart file. With file arguments it scans those files in full.
+/// Without a subcommand it scans. `serve` runs a long-lived file server instead, so a device
+/// can read the report over the network — see `impact_serve`'s docs.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:impact_radar/src/model/impact_report.dart';
 import 'package:impact_radar/src/scan/impact_scanner.dart';
+import 'package:impact_radar/src/scan/serve.dart';
 
 Future<void> main(List<String> args) async {
   if (args.contains('-h') || args.contains('--help')) {
     _printUsage();
+    return;
+  }
+
+  // `serve` is a subcommand rather than a flag so its argument shape stays independent of
+  // the scanner's. Everything after it belongs to serve.
+  if (args.isNotEmpty && args.first == 'serve') {
+    await _serve(args.sublist(1));
     return;
   }
 
@@ -38,14 +48,6 @@ Future<void> main(List<String> args) async {
 
   final stopwatch = Stopwatch()..start();
   late final ImpactReport report;
-
-  if (options.files.isNotEmpty) {
-    stdout.writeln('  mode: explicit files (${options.files.length})');
-    // Explicit files are not wired up yet in v1; fall back to the diff and say so.
-    stdout.writeln(
-      '  note: explicit file mode is not implemented yet, scanning the diff instead.',
-    );
-  }
 
   try {
     report = await scanner.scan(
@@ -91,6 +93,64 @@ Future<void> main(List<String> args) async {
   stdout.writeln('  ImpactGate(reportPath: \'$outPath\', child: ...)');
 }
 
+/// `serve` subcommand: run until interrupted.
+Future<void> _serve(List<String> args) async {
+  var project = _findProjectRoot();
+  var port = 8787;
+
+  for (var i = 0; i < args.length; i++) {
+    final arg = args[i];
+    String next() {
+      if (i + 1 >= args.length) {
+        stderr.writeln('Missing value for $arg');
+        exit(2);
+      }
+      return args[++i];
+    }
+
+    switch (arg) {
+      case '--project':
+        project = next();
+      case '--port':
+        port = int.tryParse(next()) ?? port;
+      default:
+        stderr.writeln('Unknown option for serve: $arg');
+        exit(2);
+    }
+  }
+
+  if (project == null) {
+    stderr.writeln('Could not find a Dart project root from ${Directory.current.path}');
+    stderr.writeln('Pass one explicitly with --project <path>.');
+    exitCode = 2;
+    return;
+  }
+
+  stdout.writeln('impact_serve');
+  final root = Directory(project).absolute.path;
+
+  final report = File('$root${Platform.pathSeparator}impact.json');
+  if (!report.existsSync()) {
+    // Not fatal: a scan may be about to run. Worth saying, though, because a 404 from the
+    // device is otherwise a confusing thing to debug.
+    stdout.writeln('  note: no impact.json yet. Run impact_scan first.');
+  }
+
+  try {
+    await serveProject(root: root, port: port, log: (m) => stdout.writeln(m));
+  } on SocketException catch (e) {
+    stderr.writeln('');
+    stderr.writeln('Could not bind port $port: ${e.message}');
+    stderr.writeln('Something else is using it, or it is outside your allowed range.');
+    exitCode = 1;
+    return;
+  }
+
+  stdout.writeln('Ctrl-C to stop.');
+  // Park the isolate; the server runs on its own.
+  await Completer<void>().future;
+}
+
 class _Options {
   _Options({
     required this.projectRoot,
@@ -102,7 +162,6 @@ class _Options {
     required this.maxFiles,
     required this.maxQueries,
     required this.verbose,
-    required this.files,
   });
 
   final String? projectRoot;
@@ -114,7 +173,6 @@ class _Options {
   final int maxFiles;
   final int maxQueries;
   final bool verbose;
-  final List<String> files;
 
   static _Options parse(List<String> args) {
     String? root;
@@ -126,7 +184,6 @@ class _Options {
     var maxFiles = 2000;
     var maxQueries = 5000;
     var verbose = false;
-    final files = <String>[];
 
     for (var i = 0; i < args.length; i++) {
       final arg = args[i];
@@ -159,11 +216,8 @@ class _Options {
         case '--verbose':
           verbose = true;
         default:
-          if (arg.startsWith('-')) {
-            stderr.writeln('Unknown option: $arg');
-            exit(2);
-          }
-          files.add(arg);
+          stderr.writeln('Unknown option: $arg');
+          exit(2);
       }
     }
 
@@ -177,7 +231,6 @@ class _Options {
       maxFiles: maxFiles,
       maxQueries: maxQueries,
       verbose: verbose,
-      files: files,
     );
   }
 }
@@ -202,6 +255,7 @@ impact_scan - find the code affected by your recent changes
 
 Usage:
   dart run impact_radar:impact_scan [options]
+  dart run impact_radar:impact_scan serve [--project <path>] [--port <n>]
 
 Options:
   --project <path>   Project root. Defaults to walking up from the current directory
@@ -222,5 +276,19 @@ Walk limits (safety valves, not the design; hitting one sets truncated:true):
 
 Example, using a pinned SDK:
   dart run impact_radar:impact_scan --dart C:\\path\\to\\flutter_sdk\\bin\\dart.exe
+
+serve - expose the report to a device
+  Serves the project directory over HTTP. An app on a phone cannot see a file on your
+  machine, so point a tunnel at this and point the app at the tunnel:
+
+    dart run impact_radar:impact_scan serve --project path/to/app
+    ngrok http 8787
+    flutter run --dart-define=IMPACT_URL=https://<subdomain>.ngrok-free.app/impact.json
+
+  Or stay private, over USB:
+
+    dart run impact_radar:impact_scan serve --project path/to/app
+    adb reverse tcp:8787 tcp:8787
+    flutter run      # IMPACT_URL already defaults to http://127.0.0.1:8787/impact.json
 ''');
 }

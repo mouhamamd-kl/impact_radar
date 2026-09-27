@@ -20,10 +20,10 @@ import 'package:flutter/scheduler.dart';
 
 import '../model/impact_report.dart';
 import 'impact_highlight.dart';
+import 'impact_source.dart';
 
 export 'impact_highlight.dart' show ImpactHighlight;
 
-/// How much to show.
 /// Keys exposed for tests and for anyone driving the gate from a harness.
 const Key impactHighlightsKey = ValueKey<String>('impact_radar.highlights');
 const Key impactCardKey = ValueKey<String>('impact_radar.card');
@@ -33,6 +33,7 @@ const Key impactDismissKey = ValueKey<String>('impact_radar.dismiss');
 const Key impactCollapseKey = ValueKey<String>('impact_radar.collapse');
 const Key impactExpandKey = ValueKey<String>('impact_radar.expand');
 
+/// How much to show.
 enum ImpactMode {
   /// A card only: "something on this screen changed."
   screen,
@@ -49,6 +50,7 @@ class ImpactGate extends StatefulWidget {
   const ImpactGate({
     super.key,
     required this.child,
+    this.source,
     this.reportPath = 'impact.json',
     this.pollInterval = const Duration(milliseconds: 700),
     this.enabled = true,
@@ -59,7 +61,15 @@ class ImpactGate extends StatefulWidget {
 
   final Widget child;
 
-  /// Where the scanner wrote its report.
+  /// Where the report comes from.
+  ///
+  /// Defaults to [impactSourceFromEnv], which reads `IMPACT_URL` and falls back to
+  /// [reportPath] on this machine. Pass a source explicitly to override.
+  final ImpactSource? source;
+
+  /// Where the scanner wrote its report, when running on the same machine.
+  ///
+  /// Ignored if [source] is given. Useful for tests, which have no tunnel to talk to.
   final String reportPath;
 
   final Duration pollInterval;
@@ -97,13 +107,18 @@ class _ImpactGateState extends State<ImpactGate> with TickerProviderStateMixin {
   Ticker? _frameTicker;
   final GlobalKey _stackKey = GlobalKey();
 
+  ImpactSource get _source =>
+      widget.source ?? FileSource(widget.reportPath);
+
   @override
   void initState() {
     super.initState();
     _mode = widget.mode;
     if (!widget.enabled) return;
-    _report = readReportFile(widget.reportPath);
-    _pollTimer = Timer.periodic(widget.pollInterval, (_) => _poll());
+    // Fire and forget: the first paint has nothing to show yet, and _poll picks up the
+    // result a moment later. Awaiting here would delay the first frame for no gain.
+    unawaited(_poll());
+    _pollTimer = Timer.periodic(widget.pollInterval, (_) => unawaited(_poll()));
   }
 
   @override
@@ -121,10 +136,16 @@ class _ImpactGateState extends State<ImpactGate> with TickerProviderStateMixin {
 
   // --- polling: cheap, but only every interval ----------------------------------------
 
-  void _poll() {
+  Future<void> _poll() async {
     if (!mounted) return;
-    final report = readReportFile(widget.reportPath);
-    final changed = report?.generatedAt != _report?.generatedAt;
+    final report = await _source.read();
+    if (!mounted) return;
+
+    // A failed read returns null. Keeping the previous report is deliberate: the app should
+    // hold the last known state rather than blanking when the tunnel hiccups.
+    if (report == null) return;
+
+    final changed = report.generatedAt != _report?.generatedAt;
 
     final elements = _findAffectedElements();
 
