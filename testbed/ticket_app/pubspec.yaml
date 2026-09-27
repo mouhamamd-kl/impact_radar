@@ -1,0 +1,7 @@
+name: ticket_app
+description: Fixture app for testing the scanner. Data layer -> UI chain.
+publish_to: none
+version: 0.0.1
+
+environment:
+  sdk: ^3.9.0

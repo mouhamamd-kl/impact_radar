@@ -1,0 +1,21 @@
+name: impact_radar
+description: >-
+  Flags the screens affected by a code change, so a human can go verify them.
+  Core idea only, v1: a scanner script plus a banner widget.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+executables:
+  impact_scan: impact_scan

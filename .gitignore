@@ -1,0 +1,28 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock          # library package: lockfile is not committed
+*.iml
+.idea/
+.vscode/
+
+# This package
+impact.json
+
+# The fixture is a nested git repo, because the scanner needs a real git history to diff
+# against. We commit its *sources* as plain files (not as a submodule), so the repo is
+# self-contained and cloning it gives you a working fixture.
+#
+# The fixture's own git data is not committed. A directory containing `.git` would be
+# recorded as an embedded repo (mode 160000) and clones would get a broken pointer instead
+# of the files, which `.gitignore` cannot prevent. `testbed/reset_fixture.ps1` recreates it.
+testbed/*/.git/
+testbed/*/dot-git/
+testbed/*/impact.json
+
+# OS
+.DS_Store
+Thumbs.db
